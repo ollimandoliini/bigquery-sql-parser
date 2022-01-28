@@ -24,6 +24,7 @@ dependencies:
 - text
 - megaparsec
 - containers
+- raw-strings-qq
 
 library:
   source-dirs: src
