@@ -10,6 +10,7 @@ import           Prelude                    hiding (readFile)
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
+import Data.Functor (($>))
 
 
 type Parser = Parsec Void String
@@ -30,23 +31,42 @@ symbol = L.symbol sc
 symbol' :: String -> Parser String
 symbol' = L.symbol' sc
 
-newtype ColumnName = Column String deriving Show
+data Column
+    = Star
+    | ColumnName {
+    name :: String
+    , alias :: Maybe String
+} deriving Show
+
+
 newtype TableName = TableName String deriving Show
 
-data Select = Select [ColumnName] TableName deriving Show
+data Select = Select [Column] TableName deriving Show
 
 reservedKeyWords :: Set.Set String
 reservedKeyWords = Set.fromList ["FROM"]
 
-pColumnName :: Parser ColumnName
-pColumnName = try $ do
-    colName <- some letterChar
-    sc
-    if colName `Set.member` reservedKeyWords
+
+pColumn :: Parser Column
+pColumn =
+    symbol "*" $> Star
+    <|> pColumnName
+
+pName :: Parser String
+pName = do
+    name <- some letterChar
+    if name `Set.member` reservedKeyWords
         then
-            fail $ "Reserved keyword: " <> colName
+            fail $ "Reserved keyword: " <> name
         else
-            return $ Column colName
+            return name
+
+
+pColumnName :: Parser Column
+pColumnName = try $ do
+    colName <- lexeme pName
+    alias <- optional $ symbol' "as" >> lexeme pName
+    return $ ColumnName colName alias
 
 pTableName :: Parser TableName
 pTableName = TableName <$> lexeme (some letterChar)
@@ -56,8 +76,8 @@ pBigQuerySQL :: Parser Select
 pBigQuerySQL = do
     sc
     symbol' "SELECT"
-    columns <- pColumnName `sepEndBy1` symbol ","
+    columns <- pColumn `sepEndBy1` symbol ","
     symbol' "FROM"    
     Select columns <$> pTableName
 
-f = parseTest pBigQuerySQL "SELECT aa, bb, FROM morjesta"
+f = parseTest pBigQuerySQL "SELECT *, aa, bb FROM morjesta"
